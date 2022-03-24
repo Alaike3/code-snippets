@@ -1,0 +1,90 @@
+import requests
+import os
+import json
+import time
+
+from google.cloud import bigquery
+from google.cloud.exceptions import NotFound
+
+# 0.0 set authentication environemnt variable
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "<Credentials>"
+
+# 1.0 access the topic from pub/sub message
+topic = 'Boris Johnson'
+
+# 2.0 construct a BigQuery client object and set the table ID to the name of the table to be created
+client = bigquery.Client()
+project_id = '<Credentials>'
+dataset_id = topic.replace(" ", "_")
+table_id = 'batch'
+
+# 3.0 get table schema from json file
+with open('schema.json', 'r') as f:
+    schema = json.load(f)
+
+# 4.0 get dataset_id and table_id variables
+dataset_id_full = f"{project_id}.{dataset_id}"
+table_id_full = f"{project_id}.{dataset_id}.{table_id}"
+
+# 5.0 check if dataset exists, if not create the new dataset in big query
+try:
+    client.get_dataset(dataset_id_full)  # Make an API request.
+    print(f"Dataset {dataset_id_full} already exists")
+except NotFound:
+    print(f"Dataset {dataset_id_full} is not found")
+    dataset = bigquery.Dataset(dataset_id_full)
+    dataset = client.create_dataset(dataset)
+    print(f"Created dataset {dataset.project}.{dataset.dataset_id}")
+    time.sleep(2)
+
+# 6.0 check if table exists, if not create the new table in big query
+try:
+    client.get_table(table_id_full)  # Make an API request.
+    print(f"Table {table_id_full} already exists")
+except NotFound:
+    print(f"Table {table_id_full} is not found")
+    table = bigquery.Table(table_id_full, schema=schema)
+    table = client.create_table(table)
+    print(f"Created table {table.project}.{table.dataset_id}.{table.table_id}")
+    time.sleep(2)
+
+# 7.0 Setup bearer token used to access the end point
+bearer_token = "<Bearer Token>"
+
+
+def bearer_oauth(r):
+    """
+    Method required by bearer token authentication.
+    """
+
+    r.headers["Authorization"] = f"Bearer {bearer_token}"
+    r.headers["User-Agent"] = "v2RecentSearchPython"
+    return r
+
+
+# 8.0 End point in use and query parameters
+search_url = "https://api.twitter.com/2/tweets/search/recent"
+query_params = {
+  'query': topic,
+  'max_results': 100,
+  'expansions': 'author_id,attachments.media_keys,geo.place_id',
+  'tweet.fields': 'author_id,context_annotations,created_at,entities,public_metrics,attachments,lang,geo',
+  'user.fields': 'created_at,entities,location,name,username,verified,public_metrics,description',
+  'media.fields': 'url,type',
+  'place.fields': 'full_name,country,geo,country_code,place_type'
+}
+
+
+def connect_to_endpoint(url, params):
+    response = requests.get(url, auth=bearer_oauth, params=params)
+    if response.status_code != 200:
+        raise Exception(response.status_code, response.text)
+    return response.json()
+
+
+# 9.0 connect to end point to get data
+json_response = connect_to_endpoint(search_url, query_params)
+
+# 10.0 write data to destination table
+client.insert_rows_json(table_id_full, [json_response])
+print(f"Data loaded into {table_id_full}")
