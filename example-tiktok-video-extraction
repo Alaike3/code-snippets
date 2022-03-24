@@ -1,0 +1,84 @@
+import time
+import os
+import config
+import json
+import pandas as pd
+import urllib.request
+
+from selenium import webdriver
+from browsermobproxy import Server
+from selenium.webdriver.firefox.options import Options
+from haralyzer import HarPage
+from google.cloud import storage
+
+
+def main():
+    # 1.0 Create a proxy server in order to capture HAR files
+    server = Server(<Where Proxy Server is saved>)
+    server.start()
+    proxy = server.create_proxy(params={'trustAllServers': 'true'})
+
+    # 2.0 Setup undetected chrome driver to use the proxy server
+    options = Options()
+    options.proxy = proxy.selenium_proxy()
+    driver = webdriver.Firefox(options=options)
+    har_options = {'captureContent': True, 'captureHeaders': True}
+
+    # 3.0 Go to Google to set the website in which we'll access TikTok from
+    driver.get("https://www.google.co.uk")
+    time.sleep(3)
+
+    # 4.0 Get the required configurations to access TikTok
+    tik_url_prefix = config.tik_config.PUBLIC_URL_PREFIX
+    tik_url_suffix = config.tik_config.PUBLIC_URL_SUFFIX
+    list_of_tags = config.tik_config.LIST_OF_TAGS
+
+    # 5.0 Construct for loop to construct URL, scroll page and save HAR files
+    for i in list_of_tags:
+        tik_url = tik_url_prefix + i + tik_url_suffix
+        proxy.new_har(tik_url, options=har_options)
+        driver.get(tik_url)
+        time.sleep(2)
+        for j in range(10):
+            driver.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+            time.sleep(4)
+        with open(f'har_files/{i}.har', 'w', encoding='utf-8') as har_file:
+            har_file.write(json.dumps(proxy.har))
+        time.sleep(2)
+
+    server.stop()
+    driver.quit()
+
+    video_list = []
+    for tag in list_of_tags:
+        with open(f'har_files/{tag}.har', 'r') as f:
+            har_page = HarPage(f'{tik_url_prefix + tag + tik_url_suffix}', har_data=json.loads(f.read()))
+            for entry in har_page.filter_entries(content_type="video"):
+                video_link = str(entry)[13:]
+                video_list.append(video_link)
+
+    # 3.0 Go to Google to set the website in which we'll access TikTok from
+    for i in video_list:
+        urllib.request.urlretrieve(i, f'videos/{i}.mp4')
+        time.sleep(10)
+
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "<Google App Credentials>"
+
+    bucket_name = <Example Bucket Name>
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    directory = 'videos'
+
+    # Iterate through files in directory and store in Cloud Storage
+    for filename in os.listdir(directory):
+        f = os.path.join(directory, filename)
+        if os.path.isfile(f):
+            source_file_name = f"{f}"
+            destination_blob_name = f"{f}"
+            blob = bucket.blob(destination_blob_name)
+            blob.upload_from_filename(source_file_name)
+            print("File {} uploaded to {}.".format(source_file_name, destination_blob_name))
+
+
+if __name__ == "__main__":
+    main()
