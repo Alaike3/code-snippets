@@ -1,0 +1,108 @@
+"""
+DESCRIPTION
+-----------
+Module defines a file in which developers can define the specific procedure to load their own data into the moat_scripts
+automated process.
+
+OBJECTIVE
+---------
+Allow developers to define their own loading procedure in a central environment so that different datasets from ######
+can be accessed across the ##### automation suite.
+
+LOGIC
+-----
+To be defined in each specific function
+
+ASSUMPTIONS
+-----------
+- This suite will be scaled to include more automation scripts for different processes on the Google Product Area.
+"""
+
+import pandas as pd
+import sys
+import urllib.request
+
+
+# Load from CSV
+def get_moat_data_csv():
+    """
+    DESCRIPTION
+    -----------
+    function which requests a full path location to the weekly measurement data csv file. This is read into memory
+    returned as a Pandas DataFrame
+
+    LOGIC
+    -----
+    - ask the user to copy and paste the full path to the weekly moat data measurement csv file.
+    - read the csv file into memory.
+    - Please note, encoding is set to latin-1. moat files appear to not be encoded as utf-8. If there are additional
+      encoding varieties future logic should be added to deal with the variation.
+    - parse date column from mm/dd/yy to dd/mm/yy to ensure timeseries is structured correctly.
+    - Load data into a in memory dataframe
+    - Pre process to remove white spaces and to create a uniform column style for big query
+    :return: Pandas DataFrame
+    """
+    try:
+        # 1.0: User Input: Read data in from the user and load into an in memory dataframe
+        measurement_file_path = input("Please copy and paste your ##### Weekly Measurement Data below: ")
+        measurement_file_df = pd.read_csv(measurement_file_path, encoding='latin-1', parse_dates=['date'],
+                                          dayfirst=False, infer_datetime_format=True)
+
+        # 2.0 Pre processing: Check and remove white spaces in columns where the data type equals object
+        measurement_df_obj = measurement_file_df.select_dtypes(['object'])
+        measurement_file_df[measurement_df_obj.columns] = measurement_df_obj.apply(lambda column: column.str.strip())
+
+        # 2.1 Pre processing: Create uniform style for column names which meet Big Queries criteria
+        measurement_file_df.columns = measurement_file_df.columns.str.replace("[(,)]", "", regex=True)
+        measurement_file_df.columns = measurement_file_df.columns.str.replace("-", "_")
+        measurement_file_df.columns = measurement_file_df.columns.str.replace(">", "longer_than")
+        measurement_file_df.columns = measurement_file_df.columns.str.replace("2 ", "two_")
+        measurement_file_df.columns = measurement_file_df.columns.str.replace("5 ", "five_")
+        measurement_file_df.columns = measurement_file_df.columns.str.replace(" ", "_")
+        measurement_file_df.columns = measurement_file_df.columns.str.lower()
+    except FileNotFoundError(f"{measurement_file_df} not found. Try using the full directory address."):
+        sys.exit()
+    return measurement_file_df
+
+
+def get_analyst_mapping_gsheet():
+    """
+    DESCRIPTION
+    -----------
+    function requests a google sheet url for the analyst mapping google sheet that has been set to "viewable for anyone
+    with a link". This is then saved locally and read into memory.
+    returns a Pandas DataFrame.
+
+    LOGIC
+    -----
+    - set export url operator and google id operator. This will be used to construct a url in which a csv can be
+      downloaded from.
+    - ask the user to copy and paste the full url to "viewable for anyone with a link" enabled google sheet. Load this
+      string into memory.
+    - split the string to remove the string after the last forward slash and collect the remaining section
+    - split the string again to remove everything after the last forward slash and collect the removed section
+    - construct a downloadable csv link for the google sheet the user loaded in
+    - download the file locally
+    - read local file into a Pandas DataFrame
+    - remove common white-space errors that can occur during human analysis
+    :return: Pandas DataFrame
+    """
+    # 0.0: Set Export and Google id operations
+    csv_export_operator = "/export?format=csv&id="
+    google_id_operator = "&gid=0"
+    try:
+        # 1.0: User Input: Read data in from the user and load into an in memory dataframe
+        analyst_gsheet_url = input("Please copy and paste the opid mapping google sheet url: ")
+        analyst_gsheet_split_url = analyst_gsheet_url.rsplit('/', 1)[0]
+        analyst_gsheet_sheet_id = analyst_gsheet_split_url.rsplit('/', 1)[1]
+        downloadable_gsheet_csv_url = analyst_gsheet_split_url + csv_export_operator + analyst_gsheet_sheet_id + \
+                                      google_id_operator
+        urllib.request.urlretrieve(downloadable_gsheet_csv_url, "analyst_mapping.csv")  # Save file locally
+        analyst_mapping_df = pd.read_csv("analyst_mapping.csv", index_col=False)
+
+        # 2.0 Pre processing: Check and remove white spaces in columns where the data type equals object
+        analysis_df_obj = analyst_mapping_df.select_dtypes(['object'])
+        analyst_mapping_df[analysis_df_obj.columns] = analysis_df_obj.apply(lambda column: column.str.strip())
+    except FileNotFoundError(f"{downloadable_gsheet_csv_url} not found. Is this sheet viewable to anyone with a link?"):
+        sys.exit()
+    return analyst_mapping_df
