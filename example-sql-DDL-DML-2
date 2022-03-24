@@ -1,0 +1,198 @@
+/*
+Name: pacing script - sql_case_study_2
+Author: Kel Alaike
+Date Created ~ Date Modified: 12/03/2022 ~ 13/03/2022
+Purpose: SQL Case Study 2
+Description: This script when run on a PostgreSQL 14 server creates tables relating to case
+			 study exercise 2 and runs a query to output the resultant table.
+
+Required Files: [SQLPacing_market_spend_data.csv, SQLPacing_media_budget_data.csv]
+*/
+
+---------- BEGIN raw_market_spend_data ----------
+/* {
+"Table name": "raw_market_spend_data"
+"Description": "contains the raw data relating to market spend data"
+"Dependencies": "none"
+"Todo's": ""
+"Notes": ""
+}*/
+-- Create raw_market_spend_data table
+DROP TABLE IF EXISTS sql_case_study_2.raw_market_spend_data;
+CREATE TABLE sql_case_study_2.raw_market_spend_data
+(
+    date_of_activity character varying,
+    channel character varying COLLATE pg_catalog."default",
+    platform character varying COLLATE pg_catalog."default",
+    region character varying COLLATE pg_catalog."default",
+    market_spend integer,
+    cum_sum_spend integer,
+    budget_pacing character varying,
+	days_elapsed integer,
+    time_pacing character varying
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE sql_case_study_2.raw_market_spend_data
+    OWNER to postgres;
+
+-- copy data from file into table
+COPY sql_case_study_2.raw_market_spend_data(date_of_activity, channel, platform, region, market_spend,
+											 cum_sum_spend, budget_pacing, days_elapsed, time_pacing)
+FROM '/private/tmp/postgres_data/SQLPacing_market_spend_data.csv'
+CSV HEADER;
+
+---------- END raw_market_spend_data ----------
+
+---------- BEGIN raw_media_budget_data ----------
+/* {
+"Table name": "raw_media_budget_data"
+"Description": "contains the raw data relating to the media budget"
+"Dependencies": "none"
+"Todo's": ""
+"Notes": ""
+}*/
+-- Create media_budget_data table
+DROP TABLE IF EXISTS sql_case_study_2.raw_media_budget_data;
+CREATE TABLE sql_case_study_2.raw_media_budget_data
+(
+    "Year" character varying COLLATE pg_catalog."default",
+    "Month" character varying COLLATE pg_catalog."default",
+    platform character varying COLLATE pg_catalog."default",
+    region character varying COLLATE pg_catalog."default",
+    display_budget character varying COLLATE pg_catalog."default",
+    search_budget character varying COLLATE pg_catalog."default",
+    social_budget character varying COLLATE pg_catalog."default"
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE sql_case_study_2.raw_media_budget_data
+    OWNER to postgres;
+
+-- copy data from file into table
+COPY sql_case_study_2.raw_media_budget_data("Year", "Month", platform, region, display_budget,
+											 search_budget, social_budget)
+FROM '/private/tmp/postgres_data/SQLPacing_media_budget_data.csv'
+CSV HEADER;
+
+---------- END raw_media_budget_data ----------
+
+---------- BEGIN market_spend_data ----------
+/* {
+"Table name": "market_spend_data"
+"Description": "contains transformed data relating to the marketing spend. "
+"Dependencies": "raw_market_spend_data"
+"Todo's": ""
+"Notes": ""
+}*/
+-- Create market_spend_data table
+DROP TABLE IF EXISTS sql_case_study_2.market_spend_data;
+CREATE TABLE sql_case_study_2.market_spend_data AS
+(
+SELECT channel,
+	   platform,
+	   TO_DATE(date_of_activity,'DD/MM/YYYY') AS date_of_activity,
+	   (channel || EXTRACT(MONTH from TO_DATE(date_of_activity,'DD/MM/YYYY')) ||
+		platform || EXTRACT(YEAR from TO_DATE(date_of_activity,'DD/MM/YYYY')) ||
+	   CASE WHEN region = 'na' THEN 'north america' ELSE region END) as composite_key, -- key's purpose is to join data
+	   (channel || EXTRACT(MONTH from TO_DATE(date_of_activity,'DD/MM/YYYY')) ||
+		platform || EXTRACT(YEAR from TO_DATE(date_of_activity,'DD/MM/YYYY')) ||
+		CASE WHEN region = 'na' THEN 'north america' ELSE region END ||
+		EXTRACT(DAY from TO_DATE(date_of_activity,'DD/MM/YYYY'))) as primary_key, -- key's purpose is to preserve individual rows
+	   CASE WHEN region = 'na' THEN 'north america' ELSE region END AS region,
+	   CASE WHEN market_spend IS NULL THEN LAG(market_spend,1) OVER (ORDER BY TO_DATE(date_of_activity,'DD/MM/YYYY'))
+	   		ELSE market_spend END AS market_spend, -- forward fill missing data
+	   SUM(market_spend) OVER (PARTITION BY channel, platform, CASE WHEN region = 'na' THEN 'north america' ELSE region END
+							   ORDER BY TO_DATE(date_of_activity,'DD/MM/YYYY')) AS cum_sum_spend,
+	   SUM(replace(budget_pacing, '%', '')::numeric) AS budget_pacing,
+	   EXTRACT(DAY from TO_DATE(date_of_activity,'DD/MM/YYYY')) AS days_elapsed,
+	   ROUND((EXTRACT(DAY from TO_DATE(date_of_activity,'DD/MM/YYYY')) / EXTRACT(DAY from (date_trunc('MONTH', TO_DATE(
+		   date_of_activity,'DD/MM/YYYY')) + INTERVAL '1 MONTH - 1 day')::date)) * 100, 2) as time_pacing
+FROM sql_case_study_2.raw_market_spend_data
+GROUP BY primary_key, date_of_activity, channel, platform, region, market_spend
+);
+
+ALTER TABLE sql_case_study_2.market_spend_data
+    OWNER to postgres;
+
+---------- END market_spend_data ----------
+
+---------- BEGIN media_budget_data ----------
+/* {
+"Table name": "media_budget_data"
+"Description": "contains transformed data relating to the media budget. "
+"Dependencies": "raw_media_budget_data"
+"Todo's": ""
+"Notes": ""
+}*/
+-- Create media_budget_data table
+DROP TABLE IF EXISTS sql_case_study_2.media_budget_data;
+CREATE TABLE sql_case_study_2.media_budget_data AS
+(
+SELECT year, month, platform, region, SUM(display_budget) as display_budget, SUM(search_budget) as search_budget,
+	   SUM(social_budget) as social_budget, (channel || month || platform || year || region) as composite_key
+FROM (
+	SELECT
+		CASE
+  			WHEN (display_budget != '0') AND (search_budget = '0') AND (social_budget = '0') THEN 'display'
+			WHEN (display_budget = '0') AND (search_budget != '0') AND (social_budget = '0') THEN 'search'
+			WHEN (display_budget = '0') AND (search_budget = '0') AND (social_budget != '0') THEN 'social'
+  		ELSE NULL END AS channel, -- create channel column
+		CASE
+  			WHEN region = 'na' THEN 'north america'
+  		ELSE region END AS region,
+		CASE
+  			WHEN platform = 'DV360' THEN 'display video 360'
+			WHEN platform = 'FB' THEN 'facebook'
+			WHEN platform = 'G-Ads' THEN 'google-ads'
+  		ELSE NULL END AS platform,
+		CAST(EXTRACT(MONTH FROM to_date("Month", 'Mon')) AS INTEGER) AS month,
+		CAST(EXTRACT(YEAR FROM to_date("Year", 'YYYY')) AS INTEGER) AS year,
+		REPLACE(display_budget,',','')::NUMERIC as display_budget,
+		REPLACE(search_budget,',','')::NUMERIC as search_budget,
+		REPLACE(social_budget,',','')::NUMERIC as social_budget -- replace number in accountancy style to numeric type
+	FROM sql_case_study_2.raw_media_budget_data) as media_budget_data
+	GROUP BY composite_key, media_budget_data.year, media_budget_data.month, media_budget_data.platform,
+			 media_budget_data.region, media_budget_data.channel
+);
+
+ALTER TABLE sql_case_study_2.media_budget_data
+    OWNER to postgres;
+
+---------- END media_budget_data ----------
+
+---------- BEGIN overall_media_performance_data ----------
+/* {
+"Table name": "overall_media_performance_data"
+"Description": "contains transformed data relating to the overall media performance. "
+"Dependencies": "overall_media_performance_data"
+"Todo's": ""
+"Notes": ""
+}*/
+-- Create overall_media_performance_data table
+DROP TABLE IF EXISTS sql_case_study_2.overall_media_performance_data;
+CREATE TABLE sql_case_study_2.overall_media_performance_data AS
+(
+SELECT market_spend_data.date_of_activity, media_budget_data.year, media_budget_data.month,
+	   media_budget_data.platform, media_budget_data.region, market_spend_data.market_spend,
+       (display_budget + search_budget + social_budget) AS total_budget,
+       ROUND(((cum_sum_spend / (display_budget + search_budget + social_budget)) * 100), 2) AS budget_pacing,
+       market_spend_data.time_pacing
+FROM sql_case_study_2.media_budget_data AS media_budget_data
+JOIN sql_case_study_2.market_spend_data AS market_spend_data
+ON media_budget_data.composite_key = market_spend_data.composite_key
+);
+
+ALTER TABLE sql_case_study_2.overall_media_performance_data
+    OWNER to postgres;
+
+---------- END overall_media_performance_data ----------
+
+---------- BEGIN test query ----------
+SELECT *
+FROM sql_case_study_2.overall_media_performance_data
+
+---------- END test query
+
