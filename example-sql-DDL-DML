@@ -1,0 +1,200 @@
+/*
+Name: Summary data script - sql_case_study_1
+Author: Kel Alaike
+Date Created ~ Date Modified: 12/03/2022 ~ 13/03/2022
+Purpose: SQL Case Study 1
+Description: This script when run on a PostgreSQL 14 server creates tables relating to case
+			 study exercise 1 and runs a query to output the resultant table.
+
+Required Files: None
+*/
+
+---------- BEGIN video_best_practices_data ----------
+/* {
+"Table name": "video_best_practices_data"
+"Description": "contains the video creative name and data relating to it's video media performance"
+"Dependencies": "none"
+"Todo's": ""
+"Notes": ""
+}*/
+-- Create video_best_practices_data table
+DROP TABLE IF EXISTS sql_case_study_1.video_best_practices_data;
+CREATE TABLE sql_case_study_1.video_best_practices_data
+(
+    media_plan_id character varying(50) NOT NULL,
+    campaign_name character varying(50) NOT NULL,
+    creative_name character varying(50) NOT NULL,
+    video_bp_count integer NOT NULL,
+    CONSTRAINT "PK_4" PRIMARY KEY (media_plan_id)
+);
+
+ALTER TABLE sql_case_study_1.video_best_practices_data
+    OWNER to postgres;
+
+-- Insert mock data into table
+INSERT INTO sql_case_study_1.video_best_practices_data (media_plan_id, campaign_name, creative_name, video_bp_count)
+VALUES
+			('media_plan_1','Adidas Summer 2022', 'Team Adidas Video', 9),
+			('media_plan_2','Adidas Summer 2022', 'Adidas Fifa Messi', 9),
+			('media_plan_5','Goldman Sachs Savings', 'Early Career Accounts', 9),
+			('media_plan_6','Goldman Sachs Savings', 'The New Normal', 6),
+			('media_plan_10','Goldman Sachs Savings', 'Goldman For Life', 3),
+			('media_plan_11','Googler', 'Eat, Drink, Party', 10),
+			('media_plan_12','Googler', 'Google x GymShark', 8),
+			('media_plan_15','Coca Cola Summer', 'Let the good times flow', 10);
+
+---------- END video_best_practices_data ----------
+
+---------- BEGIN banner_best_practices_data ----------
+/* {
+"Table name": "banner_best_practices_data"
+"Description": "contains the banner creative name and data relating to it's banner media performance"
+"Dependencies": "none"
+"Todo's": ""
+"Notes" ""
+}*/
+-- Create banner_best_practices_data table
+DROP TABLE IF EXISTS sql_case_study_1.banner_best_practices_data;
+CREATE TABLE sql_case_study_1.banner_best_practices_data
+(
+    media_plan_id character varying(50) NOT NULL,
+    campaign_name character varying(50) NOT NULL,
+    creative_name character varying NOT NULL,
+    banner_bp_count integer NOT NULL,
+    CONSTRAINT "PK_3" PRIMARY KEY (media_plan_id)
+);
+
+ALTER TABLE sql_case_study_1.banner_best_practices_data
+    OWNER to postgres;
+
+-- Insert mock data into table
+INSERT INTO sql_case_study_1.banner_best_practices_data (media_plan_id, campaign_name, creative_name, banner_bp_count)
+VALUES
+			('media_plan_1','Adidas Summer 2022', 'Team Adidas Banner', 6),
+			('media_plan_2','Adidas Summer 2022', 'Messi Strike Banner', 6),
+			('media_plan_3','Adidas Summer 2022', 'CR7 All Stars', 9),
+			('media_plan_4','Adidas Summer 2022', 'Adidas Originals', 10),
+			('media_plan_5','Goldman Sachs Savings', 'Young at Goldman', 6),
+			('media_plan_6','Goldman Sachs Savings', 'London Underground Yag', 6),
+			('media_plan_7','Goldman Sachs Savings', 'TFL Bus Asset Classes', 8),
+			('media_plan_8','Goldman Sachs Savings', 'Taxi Asset Classes', 7),
+			('media_plan_9','Goldman Sachs Savings', 'TFL Bus App Download', 9),
+			('media_plan_10','Goldman Sachs Savings', 'Life with Goldman', 4),
+			('media_plan_11','Googler', 'TFL Best Date Spots?', 10),
+			('media_plan_12','Googler', 'London Underground Nearest Gym', 9),
+			('media_plan_13','Coca Cola Summer', 'Crisp Cola', 6),
+			('media_plan_14','Coca Cola Summer', 'Taxi Hey Summer!', 3),
+			('media_plan_15','Coca Cola Summer', 'Thirsty?', 6);
+
+---------- END banner_best_practices_data ----------
+
+---------- BEGIN creative_testing_tracker_data ----------
+/* {
+"Table name": "creative_testing_tracker_data"
+"Description": "contains the all creatives by name and data relating to it's banner media performance"
+"Dependencies": ["banner_best_practices_data", "video_best_practices_data"]
+"Todo's": ""
+"Notes": ""
+}*/
+-- Create creative_testing_tracker_data table
+DROP TABLE IF EXISTS sql_case_study_1.creative_testing_tracker_data;
+CREATE TABLE sql_case_study_1.creative_testing_tracker_data AS
+(-- Assign the label 'creative_type', label pri_passed as boolean and combine banner and video tables together
+	SELECT media_plan_id, campaign_name, creative_name, 'banner' AS creative_type, (banner_bp_count >= 8) AS pri_passed
+	FROM sql_case_study_1.banner_best_practices_data banner_best_practices_data
+	UNION
+	SELECT media_plan_id, campaign_name, creative_name, 'video' AS creative_type, (video_bp_count >= 9) AS pri_passed
+	FROM sql_case_study_1.video_best_practices_data video_best_practices_data
+);
+
+ALTER TABLE sql_case_study_1.creative_testing_tracker_data
+    OWNER to postgres;
+
+---------- END creative_testing_tracker_data ----------
+
+---------- BEGIN results_data ----------
+/* {
+"Table name": "results_data"
+"Description": "contains the campaign performance metrics for each media plan"
+"Dependencies": "none"
+"Todo's": ""
+"Notes" ""
+}*/
+-- Create results_data table
+DROP TABLE IF EXISTS sql_case_study_1.results_data;
+CREATE TABLE sql_case_study_1.results_data
+(
+    media_plan_id character varying NOT NULL,
+    campaign_name character varying NOT NULL,
+    product character varying NOT NULL,
+    reach integer NOT NULL,
+    abs_lift numeric NOT NULL,
+    spends integer NOT NULL
+);
+
+ALTER TABLE sql_case_study_1.results_data
+    OWNER to postgres;
+
+-- Insert mock data into table
+INSERT INTO sql_case_study_1.results_data (media_plan_id, campaign_name, product, reach, abs_lift, spends)
+VALUES
+			('media_plan_1','Adidas Summer 2022','Adidas',39847,456.0,53737),
+			('media_plan_2','Adidas Summer 2022','Adidas',4857,345.0,9156),
+			('media_plan_3','Adidas Summer 2022','Adidas',32531,495.0,47885),
+			('media_plan_4','Adidas Summer 2022','Adidas',17590,123.0,46057),
+			('media_plan_5','Goldman Sachs Savings','Goldman Sachs',24883,460.0,99030),
+			('media_plan_6','Goldman Sachs Savings','Goldman Sachs',35766,296.0,46837),
+			('media_plan_7','Goldman Sachs Savings','Goldman Sachs',9919,532.0,89922),
+			('media_plan_8','Goldman Sachs Savings','Goldman Sachs',33035,568.0,81353),
+			('media_plan_9','Goldman Sachs Savings','Goldman Sachs',30749,351.0,24755),
+			('media_plan_10','Goldman Sachs Savings','Goldman Sachs',32129,628.0,22127),
+			('media_plan_11','Googler','Google',6710,531.0,75993),
+			('media_plan_12','Googler','Google',37073,246.0,71054),
+			('media_plan_13','Coca Cola Summer','Coca Cola',24983,630.0,3743),
+			('media_plan_14','Coca Cola Summer','Coca Cola',17591,807.0,14589),
+			('media_plan_15','Coca Cola Summer','Coca Cola',25363,307.0,81646);
+
+---------- END results_data ----------
+
+---------- BEGIN campaign_creative_performance_summary ----------
+/* {
+"Table name": "campaign_creative_performance_summary"
+"Description": "contains summary campaign performance calculations for each media plan"
+"Dependencies": "['banner_best_practices_data', "video_best_practices_data', 'results_data']"
+"Todo's": ""
+"Notes" ""
+}*/
+-- Create campaign_creative_performance_summary table
+DROP TABLE IF EXISTS sql_case_study_1.campaign_creative_performance_summary;
+CREATE TABLE sql_case_study_1.campaign_creative_performance_summary AS
+(
+	SELECT best_practice_data.media_plan_id, best_practice_data.campaign_name, results_data.product,
+		   ROUND(((results_data.spends / (results_data.reach * results_data.abs_lift)) * 100), 2) AS CPIL,
+		   ROUND(CAST(COUNT(CASE WHEN (best_practice_data.pri_passed) AND (best_practice_data.creative_type = 'video')
+		                              THEN 1
+								 WHEN (best_practice_data.pri_passed) AND (best_practice_data.creative_type = 'banner')
+								      THEN 1 END) as DECIMAL) /
+				 CAST(COUNT(bp_count) AS DECIMAL)*100, 2) AS creatives_passing_bp_percent,
+		   ROUND(CAST(COUNT(CASE WHEN best_practice_data.pri_passed THEN 1 END) as DECIMAL) /
+				 CAST(COUNT(bp_count) AS DECIMAL)*100, 2) AS creatives_meeting_goal_percent
+	FROM (
+		   SELECT media_plan_id, campaign_name, creative_name, 'banner' AS creative_type, (video_bp_count >= 8) AS pri_passed,
+				  (video_bp_count) AS bp_count
+		   FROM sql_case_study_1.video_best_practices_data video_bp_data
+		   UNION
+		   SELECT banner_bp_data.media_plan_id, banner_bp_data.campaign_name, banner_bp_data.creative_name, 'video' AS creative_type,
+				  (banner_bp_count >= 9) AS pri_passed, (banner_bp_count) AS bp_count
+		   FROM sql_case_study_1.banner_best_practices_data banner_bp_data
+		 ) AS best_practice_data
+		   JOIN sql_case_study_1.results_data AS results_data
+		   ON best_practice_data.media_plan_id = results_data.media_plan_id
+		   GROUP BY best_practice_data.media_plan_id, best_practice_data.campaign_name, results_data.product, results_data.spends, results_data.reach, results_data.abs_lift
+		   );
+
+ALTER TABLE sql_case_study_1.campaign_creative_performance_summary
+    OWNER to postgres;
+---------- END campaign_creative_performance_summary ----------
+
+---------- BEGIN test query ----------
+SELECT *
+FROM sql_case_study_1.campaign_creative_performance_summary
